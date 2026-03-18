@@ -30,6 +30,15 @@ const frontendPath = fs.existsSync(path.join(__dirname, 'index.html'))
   : path.join(__dirname, 'frontend');
 app.use(express.static(frontendPath));
 
+// Explicitly serve novnc folder
+const novncPath = path.join(__dirname, 'novnc');
+if (fs.existsSync(novncPath)) {
+  app.use('/novnc', express.static(novncPath));
+  console.log('[novnc] Serving noVNC from', novncPath);
+} else {
+  console.warn('[novnc] WARNING: novnc folder not found at', novncPath);
+}
+
 // ─── DATABASE ─────────────────────────────────────────────────────
 function loadDB() {
   if (!fs.existsSync(DATA_FILE)) return { users: [], pcs: [] };
