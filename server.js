@@ -204,11 +204,6 @@ wss.on('connection', (ws, req) => {
   const vncMatch = pathname.match(/^\/vnc-ws\/([a-f0-9-]+)/);
   if (vncMatch) {
     const pcId = vncMatch[1];
-    const isLocal = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
-    if (!isLocal) {
-      const t = url.searchParams.get('token') || '';
-      try { jwt.verify(t, JWT_SECRET); } catch { ws.close(4001, 'Unauthorized'); return; }
-    }
 
     const db = loadDB();
     const pc = db.pcs.find(p => p.id === pcId);
