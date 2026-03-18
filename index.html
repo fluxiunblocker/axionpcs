@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AxionPCs — Remote Access</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&family=Figtree:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #05060a;
+      --bg2: #090b10;
+      --bg3: #0e1118;
+      --surface: #131720;
+      --surface2: #181d28;
+      --border: rgba(255, 255, 255, 0.055);
+      --border2: rgba(255, 255, 255, 0.10);
+      --border3: rgba(255, 255, 255, 0.16);
+      --text: #dde1ea;
+      --muted: #6b7585;
+      --muted2: #3a4050;
+      --accent: #00e5c3;
+      --accentd: #00b89c;
+      --accent-bg: rgba(0, 229, 195, 0.07);
+      --accent-br: rgba(0, 229, 195, 0.22);
+      --red: #ff3d5a;
+      --red-bg: rgba(255, 61, 90, 0.08);
+      --red-br: rgba(255, 61, 90, 0.25);
+      --amber: #f59e0b;
+      --amber-bg: rgba(245, 158, 11, 0.08);
+      --blue: #4488ff;
+      --r: 10px;
+      --mono: 'JetBrains Mono', monospace;
+      --display: 'Rajdhani', sans-serif;
+      --body: 'Figtree', sans-serif;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      font-size: 15px
+    }
+
+    /* ── PAGE ROUTER ── */
+    .page {
+      display: none;
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      inset: 0;
+      overflow: hidden
+    }
+
+    .page.active {
+      display: flex
+    }
+
+    /* ══════════════════════════════════════
+   AUTH PAGES (login + signup)
+══════════════════════════════════════ */
+    .auth-page {
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      position: relative;
+    }
+
+    /* animated grid background */
+    .auth-page::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0, 229, 195, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 229, 195, 0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%);
+      pointer-events: none;
+    }
+
+    /* glowing orb */
+    .auth-page::after {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(0, 229, 195, 0.06) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -60%);
+      pointer-events: none;
+    }
+
+    .auth-box {
+      position: relative;
+      z-index: 1;
+      width: 420px;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+      animation: fadeUp 0.35s ease both;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .auth-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .auth-logo-mark {
+      width: 40px;
+      height: 40px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 24px rgba(0, 229, 195, 0.35);
+    }
+
+    .auth-logo-mark svg {
+      width: 22px;
+      height: 22px;
+      fill: var(--bg)
+    }
+
+    .auth-logo-text {
+      font-family: var(--display);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text);
+    }
+
+    .auth-logo-text span {
+      color: var(--accent)
+    }
+
+    .auth-title {
+      font-family: var(--display);
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px
+    }
+
+    .auth-sub {
+      font-size: 13.5px;
+      color: var(--muted);
+      margin-bottom: 28px
+    }
+
+    .field {
+      margin-bottom: 16px
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--muted);
+      margin-bottom: 7px;
+      letter-spacing: 0.05em
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-family: var(--body);
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .field input:focus {
+      border-color: var(--accent-br);
+      box-shadow: 0 0 0 3px rgba(0, 229, 195, 0.08)
+    }
+
+    .field input::placeholder {
+      color: var(--muted2)
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: var(--display);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+      margin-top: 4px;
+    }
+
+    .btn-primary:hover {
+      background: var(--accentd);
+      box-shadow: 0 6px 24px rgba(0, 229, 195, 0.25);
+      transform: translateY(-1px)
+    }
+
+    .btn-primary:active {
+      transform: translateY(0)
+    }
+
+    .auth-switch {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .auth-switch a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer
+    }
+
+    .auth-switch a:hover {
+      text-decoration: underline
+    }
+
+    .auth-error {
+      background: var(--red-bg);
+      border: 1px solid var(--red-br);
+      color: var(--red);
+      border-radius: 7px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+      font-family: var(--mono);
+    }
+
+    /* ══════════════════════════════════════
+   DASHBOARD PAGE
+══════════════════════════════════════ */
+    #page-dashboard {
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .topbar {
+      height: 56px;
+      min-height: 56px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 16px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .topbar-logo {
+      font-family: var(--display);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text);
+      flex: 1;
+    }
+
+    .topbar-logo span {
+      color: var(--accent)
+    }
+
+    .topbar-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--accent-bg);
+      border: 1px solid var(--accent-br);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--display);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .topbar-btn {
+      background: none;
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      padding: 6px 14px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .topbar-btn:hover {
+      color: var(--text);
+      border-color: var(--border3)
+    }
+
+    .dashboard-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 32px 60px;
+    }
+
+    .dash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .dash-title {
+      font-family: var(--display);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px
+    }
+
+    .dash-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+      font-family: var(--mono)
+    }
+
+    .btn-add {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: var(--display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+    }
+
+    .btn-add:hover {
+      background: var(--accentd);
+      box-shadow: 0 4px 20px rgba(0, 229, 195, 0.2);
+      transform: translateY(-1px)
+    }
+
+    .btn-add svg {
+      width: 16px;
+      height: 16px
+    }
+
+    /* PC GRID */
+    .pc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .pc-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, transform 0.18s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+      animation: fadeUp 0.3s ease both;
+    }
+
+    .pc-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(0, 229, 195, 0.03) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.2s;
+      border-radius: 14px;
+    }
+
+    .pc-card:hover {
+      border-color: var(--accent-br);
+      background: var(--surface);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 229, 195, 0.08);
+    }
+
+    .pc-card:hover::before {
+      opacity: 1
+    }
+
+    .pc-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px
+    }
+
+    .pc-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pc-icon svg {
+      width: 26px;
+      height: 26px;
+      opacity: 0.7
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 100px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .status-online {
+      background: rgba(0, 229, 195, 0.1);
+      border: 1px solid rgba(0, 229, 195, 0.25);
+      color: var(--accent)
+    }
+
+    .status-offline {
+      background: rgba(255, 61, 90, 0.08);
+      border: 1px solid rgba(255, 61, 90, 0.2);
+      color: #ff6b80
+    }
+
+    .status-sleep {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      color: var(--amber)
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%
+    }
+
+    .online .status-dot {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: blink 2s infinite
+    }
+
+    .offline .status-dot {
+      background: #ff6b80
+    }
+
+    .sleep .status-dot {
+      background: var(--amber)
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0.5
+      }
+    }
+
+    .pc-name {
+      font-family: var(--display);
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px
+    }
+
+    .pc-os {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--mono)
+    }
+
+    .pc-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+    }
+
+    .pc-stat {
+      text-align: center
+    }
+
+    .pc-stat-val {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text)
+    }
+
+    .pc-stat-label {
+      font-size: 10px;
+      color: var(--muted2);
+      font-family: var(--mono);
+      margin-top: 1px;
+      letter-spacing: 0.05em
+    }
+
+    .pc-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px
+    }
+
+    .pc-btn {
+      flex: 1;
+      padding: 8px;
+      border-radius: 7px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .pc-btn:hover {
+      border-color: var(--border3);
+      color: var(--text);
+      background: var(--surface)
+    }
+
+    .pc-btn-primary {
+      background: var(--accent-bg);
+      border-color: var(--accent-br);
+      color: var(--accent);
+    }
+
+    .pc-btn-primary:hover {
+      background: rgba(0, 229, 195, 0.14);
+      color: var(--accent)
+    }
+
+    .pc-btn svg {
+      width: 12px;
+      height: 12px
+    }
+
+    /* EMPTY STATE */
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      grid-column: 1/-1;
+    }
+
+    .empty-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+
+    .empty-icon svg {
+      width: 36px;
+      height: 36px;
+      opacity: 0.4
+    }
+
+    .empty-title {
+      font-family: var(--display);
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px
+    }
+
+    .empty-sub {
+      font-size: 13.5px;
+      color: var(--muted);
+      margin-bottom: 24px
+    }
+
+    /* ══════════════════════════════════════
+   MODAL (Add PC + Delete)
+══════════════════════════════════════ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .modal {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      padding: 36px;
+      width: 480px;
+      max-width: 95vw;
+      box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
+      transform: translateY(16px) scale(0.98);
+      transition: transform 0.22s ease;
+      position: relative;
+    }
+
+    .modal-overlay.open .modal {
+      transform: translateY(0) scale(1)
+    }
+
+    .modal-title {
+      font-family: var(--display);
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px
+    }
+
+    .modal-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 24px;
+      font-family: var(--mono)
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 18px;
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: 7px;
+      transition: background 0.15s, color 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      background: var(--surface);
+      color: var(--text)
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      justify-content: flex-end
+    }
+
+    .btn-ghost {
+      background: none;
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 9px 18px;
+      font-family: var(--mono);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--border3);
+      color: var(--text)
+    }
+
+    .btn-confirm {
+      background: var(--accent);
+      color: var(--bg);
+      font-family: var(--display);
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 22px;
+      cursor: pointer;
+      transition: background 0.18s, box-shadow 0.18s;
+    }
+
+    .btn-confirm:hover {
+      background: var(--accentd);
+      box-shadow: 0 4px 18px rgba(0, 229, 195, 0.2)
+    }
+
+    .btn-danger {
+      background: var(--red);
+      color: #fff
+    }
+
+    .btn-danger:hover {
+      background: #e02244;
+      box-shadow: 0 4px 18px rgba(255, 61, 90, 0.25)
+    }
+
+    /* install instruction box */
+    .install-box {
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+
+    .install-box-header {
+      padding: 9px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .copy-btn:hover {
+      color: var(--text);
+      border-color: var(--border3)
+    }
+
+    .install-box pre {
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: #8ab4f8;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    /* ══════════════════════════════════════
+   REMOTE VIEWER PAGE
+══════════════════════════════════════ */
+    #page-remote {
+      flex-direction: column;
+      overflow: hidden;
+      background: #000
+    }
+
+    .remote-topbar {
+      height: 48px;
+      min-height: 48px;
+      background: rgba(9, 11, 16, 0.95);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      position: relative;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+    }
+
+    .remote-back {
+      background: none;
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      color: var(--muted);
+      padding: 5px 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s;
+    }
+
+    .remote-back:hover {
+      color: var(--text);
+      border-color: var(--border3)
+    }
+
+    .remote-back svg {
+      width: 12px;
+      height: 12px
+    }
+
+    .remote-pc-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1
+    }
+
+    .remote-pc-name {
+      font-family: var(--display);
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.5px
+    }
+
+    .remote-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent)
+    }
+
+    .remote-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: blink 2s infinite
+    }
+
+    .remote-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .ctrl-btn {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      padding: 6px 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s;
+    }
+
+    .ctrl-btn:hover {
+      border-color: var(--border3);
+      color: var(--text)
+    }
+
+    .ctrl-btn svg {
+      width: 13px;
+      height: 13px
+    }
+
+    .ctrl-btn-red {
+      border-color: var(--red-br);
+      color: var(--red);
+      background: var(--red-bg)
+    }
+
+    .ctrl-btn-red:hover {
+      background: rgba(255, 61, 90, 0.14)
+    }
+
+    .ctrl-btn-amber {
+      border-color: rgba(245, 158, 11, 0.25);
+      color: var(--amber);
+      background: var(--amber-bg)
+    }
+
+    .ctrl-btn-amber:hover {
+      background: rgba(245, 158, 11, 0.14)
+    }
+
+    .ctrl-btn-accent {
+      border-color: var(--accent-br);
+      color: var(--accent);
+      background: var(--accent-bg)
+    }
+
+    .ctrl-btn-accent:hover {
+      background: rgba(0, 229, 195, 0.14)
+    }
+
+    .remote-body {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex
+    }
+
+    /* noVNC iframe fills the remote body */
+    #vnc-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #0a0a0a;
+    }
+
+    /* connecting overlay */
+    .connecting-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      z-index: 10;
+      transition: opacity 0.4s;
+    }
+
+    .connecting-overlay.hidden {
+      opacity: 0;
+      pointer-events: none
+    }
+
+    .connecting-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.85s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .connecting-text {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    .connecting-pc {
+      font-family: var(--display);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px
+    }
+
+    .conn-progress {
+      width: 200px;
+      height: 3px;
+      background: var(--border2);
+      border-radius: 100px;
+      overflow: hidden
+    }
+
+    .conn-progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 100px;
+      width: 0;
+      transition: width 0.4s ease
+    }
+
+    /* power confirm panel */
+    .power-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 16px 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      z-index: 15;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      transform: translateX(-50%) translateY(8px);
+    }
+
+    .power-panel.show {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateX(-50%) translateY(0)
+    }
+
+    .power-panel-text {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text)
+    }
+
+    .power-panel-btns {
+      display: flex;
+      gap: 8px
+    }
+
+    /* ══════════════════════════════════════
+   SCROLLBAR
+══════════════════════════════════════ */
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--muted2);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--muted)
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ══════════════════════
+     LOGIN PAGE
+══════════════════════ -->
+  <div id="page-login" class="page auth-page active">
+    <div class="auth-box">
+      <div class="auth-logo">
+        <div class="auth-logo-mark">
+          <svg viewBox="0 0 24 24">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+        </div>
+        <div class="auth-logo-text">Axion<span>PCs</span></div>
+      </div>
+      <div class="auth-title">Welcome back</div>
+      <div class="auth-sub">Sign in to access your machines</div>
+      <div class="auth-error" id="login-error"></div>
+      <div class="field">
+        <label>USERNAME OR EMAIL</label>
+        <input type="text" id="login-user" placeholder="you@example.com" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>PASSWORD</label>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-primary" onclick="handleLogin()">SIGN IN</button>
+      <div class="auth-switch">Don't have an account? <a onclick="showPage('page-signup')">Create one</a></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════
+     SIGNUP PAGE
+══════════════════════ -->
+  <div id="page-signup" class="page auth-page">
+    <div class="auth-box">
+      <div class="auth-logo">
+        <div class="auth-logo-mark">
+          <svg viewBox="0 0 24 24">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+        </div>
+        <div class="auth-logo-text">Axion<span>PCs</span></div>
+      </div>
+      <div class="auth-title">Create account</div>
+      <div class="auth-sub">Start accessing your PCs remotely</div>
+      <div class="auth-error" id="signup-error"></div>
+      <div class="field">
+        <label>USERNAME</label>
+        <input type="text" id="signup-user" placeholder="cooluser123" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>EMAIL</label>
+        <input type="email" id="signup-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>PASSWORD</label>
+        <input type="password" id="signup-pass" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label>CONFIRM PASSWORD</label>
+        <input type="password" id="signup-pass2" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="btn-primary" onclick="handleSignup()">CREATE ACCOUNT</button>
+      <div class="auth-switch">Already have an account? <a onclick="showPage('page-login')">Sign in</a></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════
+     DASHBOARD PAGE
+══════════════════════ -->
+  <div id="page-dashboard" class="page">
+    <div class="topbar">
+      <div class="topbar-logo">Axion<span>PCs</span></div>
+      <div class="topbar-user">
+        <span id="topbar-username" style="font-size:12px;color:var(--muted)"></span>
+        <div class="avatar" id="topbar-avatar">A</div>
+      </div>
+      <button class="topbar-btn" onclick="handleLogout()">Logout</button>
+    </div>
+    <div class="dashboard-body">
+      <div class="dash-header">
+        <div>
+          <div class="dash-title">My Machines</div>
+          <div class="dash-sub" id="dash-sub">Loading...</div>
+        </div>
+        <button class="btn-add" onclick="openAddModal()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="8" y1="2" x2="8" y2="14" />
+            <line x1="2" y1="8" x2="14" y2="8" />
+          </svg>
+          ADD PC
+        </button>
+      </div>
+      <div class="pc-grid" id="pc-grid">
+        <!-- PC cards injected here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════
+     REMOTE VIEWER PAGE
+══════════════════════ -->
+  <div id="page-remote" class="page">
+    <div class="remote-topbar">
+      <button class="remote-back" onclick="leaveRemote()">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <polyline points="7,1 2,6 7,11" />
+        </svg>
+        Dashboard
+      </button>
+      <div class="remote-pc-info">
+        <div>
+          <div class="remote-pc-name" id="remote-pc-name">PC Name</div>
+        </div>
+        <div class="remote-status">
+          <div class="remote-status-dot"></div>
+          <span id="remote-status-text">Connected</span>
+        </div>
+      </div>
+      <div class="remote-controls">
+        <button class="ctrl-btn ctrl-btn-accent" onclick="sendCtrlAltDel()">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="1" y="3" width="12" height="8" rx="1.5" />
+            <path d="M4 7h6M7 5v4" stroke-linecap="round" />
+          </svg>
+          Ctrl+Alt+Del
+        </button>
+        <button class="ctrl-btn" onclick="toggleFullscreen()">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Fullscreen
+        </button>
+        <button class="ctrl-btn ctrl-btn-amber" onclick="showPowerPanel('sleep')">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M9.5 2a6 6 0 1 1-5.7 7.9" stroke-linecap="round" />
+            <path d="M9.5 2v4h4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Sleep
+        </button>
+        <button class="ctrl-btn ctrl-btn-amber" onclick="showPowerPanel('restart')">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M2 7a5 5 0 1 0 1.5-3.5" stroke-linecap="round" />
+            <path d="M2 3.5V7H5.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Restart
+        </button>
+        <button class="ctrl-btn ctrl-btn-red" onclick="showPowerPanel('shutdown')">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M7 1v6M4.5 3.2a5 5 0 1 0 5 0" stroke-linecap="round" />
+          </svg>
+          Shutdown
+        </button>
+      </div>
+    </div>
+    <div class="remote-body">
+      <!-- noVNC iframe - src set dynamically -->
+      <iframe id="vnc-frame" allowfullscreen></iframe>
+
+      <!-- Connecting overlay -->
+      <div class="connecting-overlay" id="connecting-overlay">
+        <div class="connecting-spinner"></div>
+        <div class="connecting-pc" id="connecting-name">Connecting...</div>
+        <div class="connecting-text" id="connecting-step">Establishing secure tunnel</div>
+        <div class="conn-progress">
+          <div class="conn-progress-bar" id="conn-bar"></div>
+        </div>
+      </div>
+
+      <!-- Power action confirm panel -->
+      <div class="power-panel" id="power-panel">
+        <div class="power-panel-text" id="power-panel-text">Restart the PC?</div>
+        <div class="power-panel-btns">
+          <button class="ctrl-btn" onclick="hidePowerPanel()">Cancel</button>
+          <button class="ctrl-btn ctrl-btn-red" id="power-confirm-btn" onclick="confirmPowerAction()">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════
+     ADD PC MODAL
+══════════════════════ -->
+  <div class="modal-overlay" id="modal-add">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal('modal-add')">✕</button>
+      <div class="modal-title">Add a PC</div>
+      <div class="modal-sub">// connect a machine to your account</div>
+      <div class="field">
+        <label>PC NAME</label>
+        <input type="text" id="add-pc-name" placeholder="Home Desktop, Gaming Rig, Work PC...">
+      </div>
+      <div class="field">
+        <label>OPERATING SYSTEM</label>
+        <select id="add-pc-os"
+          style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:11px 14px;font-family:var(--body);font-size:14px;color:var(--text);outline:none;appearance:none;">
+          <option value="windows">Windows</option>
+          <option value="linux">Linux</option>
+          <option value="macos">macOS</option>
+        </select>
+      </div>
+
+      <div class="install-box">
+        <div class="install-box-header">
+          <span>Run this on your PC to install the agent</span>
+          <button class="copy-btn" onclick="copyInstallCmd()">Copy</button>
+        </div>
+        <pre id="install-cmd">Loading...</pre>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal('modal-add')">Cancel</button>
+        <button class="btn-confirm" onclick="confirmAddPC()">Add PC</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════
+     DELETE PC MODAL
+══════════════════════ -->
+  <div class="modal-overlay" id="modal-delete">
+    <div class="modal" style="width:380px">
+      <button class="modal-close" onclick="closeModal('modal-delete')">✕</button>
+      <div class="modal-title" style="color:var(--red)">Remove PC</div>
+      <div class="modal-sub">// this will disconnect the machine from your account</div>
+      <p style="font-size:13.5px;color:var(--muted);line-height:1.65">
+        Are you sure you want to remove <strong id="delete-pc-name" style="color:var(--text)"></strong> from your
+        account? The agent on the PC will also lose access.
+      </p>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal('modal-delete')">Cancel</button>
+        <button class="btn-confirm btn-danger" onclick="confirmDeletePC()">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════
+    // CONFIG — change SERVER_URL to your backend URL
+    // ═══════════════════════════════════════════════
+    const SERVER_URL = window.location.origin; // same server serves frontend + API
+    const NOVNC_PATH = '/novnc/vnc.html';      // path to noVNC on your server
+
+    // ═══════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════
+    let currentUser = null;
+    let token = null;
+    let pcs = [];
+    let currentPC = null;
+    let pendingPowerAction = null;
+
+    // ═══════════════════════════════════════════════
+    // PAGE ROUTER
+    // ═══════════════════════════════════════════════
+    function showPage(id) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    // ═══════════════════════════════════════════════
+    // AUTH
+    // ═══════════════════════════════════════════════
+    async function handleLogin() {
+      const user = document.getElementById('login-user').value.trim();
+      const pass = document.getElementById('login-pass').value;
+      const err = document.getElementById('login-error');
+      err.style.display = 'none';
+      if (!user || !pass) { showError(err, 'Please fill in all fields'); return; }
+      try {
+        const res = await apiFetch('/api/login', 'POST', { username: user, password: pass });
+        if (res.ok) {
+          const data = await res.json();
+          token = data.token;
+          currentUser = data.user;
+          localStorage.setItem('axion_token', token);
+          localStorage.setItem('axion_user', JSON.stringify(currentUser));
+          loadDashboard();
+        } else {
+          const d = await res.json();
+          showError(err, d.error || 'Invalid credentials');
+        }
+      } catch (e) { showError(err, 'Cannot reach server. Is it running?'); }
+    }
+
+    async function handleSignup() {
+      const user = document.getElementById('signup-user').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const pass = document.getElementById('signup-pass').value;
+      const pass2 = document.getElementById('signup-pass2').value;
+      const err = document.getElementById('signup-error');
+      err.style.display = 'none';
+      if (!user || !email || !pass || !pass2) { showError(err, 'Please fill in all fields'); return; }
+      if (pass !== pass2) { showError(err, 'Passwords do not match'); return; }
+      if (pass.length < 6) { showError(err, 'Password must be at least 6 characters'); return; }
+      try {
+        const res = await apiFetch('/api/signup', 'POST', { username: user, email, password: pass });
+        if (res.ok) {
+          const data = await res.json();
+          token = data.token;
+          currentUser = data.user;
+          localStorage.setItem('axion_token', token);
+          localStorage.setItem('axion_user', JSON.stringify(currentUser));
+          loadDashboard();
+        } else {
+          const d = await res.json();
+          showError(err, d.error || 'Signup failed');
+        }
+      } catch (e) { showError(err, 'Cannot reach server. Is it running?'); }
+    }
+
+    function handleLogout() {
+      token = null; currentUser = null; pcs = [];
+      localStorage.removeItem('axion_token');
+      localStorage.removeItem('axion_user');
+      showPage('page-login');
+    }
+
+    function showError(el, msg) {
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    // ═══════════════════════════════════════════════
+    // DASHBOARD
+    // ═══════════════════════════════════════════════
+    async function loadDashboard() {
+      showPage('page-dashboard');
+      document.getElementById('topbar-username').textContent = currentUser.username;
+      document.getElementById('topbar-avatar').textContent = currentUser.username[0].toUpperCase();
+      document.getElementById('dash-sub').textContent = 'Loading machines...';
+      await fetchPCs();
+      // Poll every 10 seconds to update online/offline status
+      clearInterval(window._pollInterval);
+      window._pollInterval = setInterval(() => {
+        if (document.getElementById('page-dashboard').classList.contains('active')) fetchPCs();
+      }, 10000);
+    }
+
+    async function fetchPCs() {
+      try {
+        const res = await apiFetch('/api/pcs', 'GET');
+        if (res.ok) { pcs = await res.json(); }
+        else { pcs = []; }
+      } catch (e) { pcs = []; }
+      renderPCGrid();
+    }
+
+    function renderPCGrid() {
+      const grid = document.getElementById('pc-grid');
+      const online = pcs.filter(p => p.status === 'online').length;
+      document.getElementById('dash-sub').textContent =
+        `${pcs.length} machine${pcs.length !== 1 ? 's' : ''} · ${online} online`;
+      if (pcs.length === 0) {
+        grid.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon"><svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="6" width="28" height="20" rx="3"/><path d="M12 30h12M18 26v4" stroke-linecap="round"/></svg></div>
+        <div class="empty-title">No machines yet</div>
+        <div class="empty-sub">Add your first PC to get started</div>
+        <button class="btn-add" onclick="openAddModal()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+          ADD PC
+        </button>
+      </div>`;
+        return;
+      }
+      grid.innerHTML = pcs.map((pc, i) => pcCardHTML(pc, i)).join('');
+    }
+
+    function pcCardHTML(pc, i) {
+      const statusClass = pc.status === 'online' ? 'status-online online' :
+        pc.status === 'sleep' ? 'status-sleep sleep' : 'status-offline offline';
+      const statusLabel = pc.status === 'online' ? 'Online' :
+        pc.status === 'sleep' ? 'Sleeping' : 'Offline';
+      const osIcon = pc.os === 'windows' ? winIcon : pc.os === 'linux' ? linuxIcon : macIcon;
+      const canConnect = pc.status === 'online';
+      return `
+  <div class="pc-card" style="animation-delay:${i * 60}ms" onclick="openRemote('${pc.id}')">
+    <div class="pc-card-top">
+      <div class="pc-icon">${osIcon}</div>
+      <div class="status-badge ${statusClass}">
+        <div class="status-dot"></div>${statusLabel}
+      </div>
+    </div>
+    <div class="pc-name">${escHtml(pc.name)}</div>
+    <div class="pc-os">${pc.os.charAt(0).toUpperCase() + pc.os.slice(1)} · ${pc.ip || 'No IP'}</div>
+    <div class="pc-stats">
+      <div class="pc-stat">
+        <div class="pc-stat-val">${pc.status === 'online' ? pc.cpu + '%' : '—'}</div>
+        <div class="pc-stat-label">CPU</div>
+      </div>
+      <div class="pc-stat">
+        <div class="pc-stat-val">${pc.status === 'online' ? pc.ram + '%' : '—'}</div>
+        <div class="pc-stat-label">RAM</div>
+      </div>
+      <div class="pc-stat">
+        <div class="pc-stat-val">${pc.disk + '%'}</div>
+        <div class="pc-stat-label">DISK</div>
+      </div>
+    </div>
+    <div class="pc-actions" onclick="event.stopPropagation()">
+      <button class="pc-btn pc-btn-primary" ${!canConnect ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''} onclick="${canConnect ? `openRemote('${pc.id}')` : ''}" >
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="2" width="10" height="7" rx="1"/><path d="M4 10h4" stroke-linecap="round"/></svg>
+        Connect
+      </button>
+      <button class="pc-btn" onclick="openDeleteModal('${pc.id}')">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 3h8M5 3V2h2v1M4 5v4M8 5v4M3 3l.5 7h5L9 3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Remove
+      </button>
+    </div>
+  </div>`;
+    }
+
+    const winIcon = `<svg viewBox="0 0 26 26" fill="none"><rect x="2" y="2" width="10.5" height="10.5" rx="1" fill="#00e5c3" opacity="0.8"/><rect x="13.5" y="2" width="10.5" height="10.5" rx="1" fill="#00e5c3" opacity="0.6"/><rect x="2" y="13.5" width="10.5" height="10.5" rx="1" fill="#00e5c3" opacity="0.6"/><rect x="13.5" y="13.5" width="10.5" height="10.5" rx="1" fill="#00e5c3" opacity="0.4"/></svg>`;
+    const linuxIcon = `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"><ellipse cx="13" cy="10" rx="5" ry="7"/><path d="M8 17c-3 1-4 4-2 5s3-1 7-1 6 2 7 1-1-4-4-5" stroke-linecap="round"/><circle cx="11" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/></svg>`;
+    const macIcon = `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"><path d="M17 4c0-2-2-3-4-2-1 .5-1 2 0 2.5C15 5 17 5.5 17 4z"/><path d="M9 8c-4 0-6 3.5-6 7s2 8 5 8c1.5 0 2.5-1 4-1s2.5 1 4 1c3 0 5-4 5-8 0-3.5-2-7-6-7-1.5 0-2.5.5-3 .5S10.5 8 9 8z" stroke-linecap="round"/></svg>`;
+
+    function escHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ═══════════════════════════════════════════════
+    // ADD PC MODAL
+    // ═══════════════════════════════════════════════
+    function openAddModal() {
+      updateInstallCmd();
+      document.getElementById('modal-add').classList.add('open');
+      document.getElementById('add-pc-name').focus();
+    }
+
+    let pendingAgentToken = null;
+
+    function openAddModal() {
+      pendingAgentToken = null;
+      document.getElementById('add-pc-name').value = '';
+      document.getElementById('install-cmd').textContent = 'Fill in a PC name and click "Add PC" to generate your token.';
+      document.getElementById('modal-add').classList.add('open');
+      document.getElementById('add-pc-name').focus();
+    }
+
+    function updateInstallCmd(agentToken) {
+      const os = document.getElementById('add-pc-os').value;
+      const tok = agentToken || pendingAgentToken || 'ADD_PC_FIRST';
+      const cmd = os === 'windows'
+        ? `# 1. Install TightVNC from https://tightvnc.com (set a password)\n# 2. Install Python from https://python.org\n# 3. Run in PowerShell:\npip install websocket-client psutil\npython axion-agent.py --token ${tok} --server ${SERVER_URL}`
+        : `# 1. Install a VNC server (e.g. x11vnc)\n# 2. Run in Terminal:\npip3 install websocket-client psutil\npython3 axion-agent.py --token ${tok} --server ${SERVER_URL}`;
+      document.getElementById('install-cmd').textContent = cmd;
+    }
+
+    document.getElementById('add-pc-os')?.addEventListener('change', () => updateInstallCmd());
+
+    function copyInstallCmd() {
+      const text = document.getElementById('install-cmd').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 1800);
+      });
+    }
+
+    async function confirmAddPC() {
+      const name = document.getElementById('add-pc-name').value.trim();
+      const os = document.getElementById('add-pc-os').value;
+      if (!name) { alert('Please enter a PC name'); return; }
+
+      // If we already created this PC, just close
+      if (pendingAgentToken) { closeModal('modal-add'); pendingAgentToken = null; await fetchPCs(); return; }
+
+      try {
+        const res = await apiFetch('/api/pcs', 'POST', { name, os });
+        if (res.ok) {
+          const data = await res.json();
+          pendingAgentToken = data.agentToken;
+          // Show the real agent token in the install box
+          updateInstallCmd(data.agentToken);
+          // Change button to "Done"
+          document.querySelector('#modal-add .btn-confirm').textContent = 'Done';
+          await fetchPCs();
+        } else {
+          const d = await res.json();
+          alert('Error: ' + (d.error || 'Could not add PC'));
+        }
+      } catch (e) {
+        alert('Could not reach server. Make sure node server.js is running.');
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // DELETE PC MODAL
+    // ═══════════════════════════════════════════════
+    let deletePCId = null;
+
+    function openDeleteModal(id) {
+      const pc = pcs.find(p => p.id === id);
+      if (!pc) return;
+      deletePCId = id;
+      document.getElementById('delete-pc-name').textContent = pc.name;
+      document.getElementById('modal-delete').classList.add('open');
+    }
+
+    async function confirmDeletePC() {
+      if (!deletePCId) return;
+      try {
+        await apiFetch(`/api/pcs/${deletePCId}`, 'DELETE');
+      } catch (e) { }
+      pcs = pcs.filter(p => p.id !== deletePCId);
+      deletePCId = null;
+      closeModal('modal-delete');
+      renderPCGrid();
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+      if (id === 'modal-add') {
+        document.querySelector('#modal-add .btn-confirm').textContent = 'Add PC';
+        pendingAgentToken = null;
+      }
+    }
+
+    // close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay) overlay.classList.remove('open');
+      });
+    });
+
+    // ═══════════════════════════════════════════════
+    // REMOTE VIEWER
+    // ═══════════════════════════════════════════════
+    function openRemote(id) {
+      const pc = pcs.find(p => p.id === id);
+      if (!pc) return;
+      if (pc.status !== 'online') return;
+
+      const vncPassword = prompt('Enter your TightVNC password:');
+      if (vncPassword === null) return; // user cancelled
+
+      currentPC = pc;
+      document.getElementById('remote-pc-name').textContent = pc.name;
+      document.getElementById('connecting-name').textContent = pc.name;
+      document.getElementById('connecting-step').textContent = 'Establishing secure tunnel...';
+      showPage('page-remote');
+
+      const bar = document.getElementById('conn-bar');
+      const overlay = document.getElementById('connecting-overlay');
+      const steps = [
+        [15, 'Resolving agent address...'],
+        [35, 'Authenticating session...'],
+        [60, 'Opening VNC tunnel...'],
+        [85, 'Streaming display...'],
+        [100, 'Connected!'],
+      ];
+      let i = 0;
+      const tick = () => {
+        if (i >= steps.length) {
+          setTimeout(() => overlay.classList.add('hidden'), 400);
+          document.getElementById('vnc-frame').src = buildVNCUrl(pc, vncPassword);
+          return;
+        }
+        const [pct, label] = steps[i++];
+        bar.style.width = pct + '%';
+        document.getElementById('connecting-step').textContent = label;
+        setTimeout(tick, 600);
+      };
+      bar.style.width = '0%';
+      overlay.classList.remove('hidden');
+      setTimeout(tick, 300);
+    }
+
+    function buildVNCUrl(pc, vncPassword) {
+      const pass = vncPassword ? `&password=${encodeURIComponent(vncPassword)}` : '';
+      return `${NOVNC_PATH}?host=${encodeURIComponent(window.location.hostname)}&port=${window.location.port || (window.location.protocol === 'https:' ? 443 : 80)}&path=vnc-ws/${pc.id}&autoconnect=true&resize=scale&show_dot=true&token=${encodeURIComponent(token || '')}${pass}`;
+    }
+
+    function leaveRemote() {
+      document.getElementById('vnc-frame').src = 'about:blank';
+      currentPC = null;
+      hidePowerPanel();
+      showPage('page-dashboard');
+      fetchPCs(); // refresh status
+    }
+
+    function toggleFullscreen() {
+      const frame = document.getElementById('vnc-frame');
+      if (!document.fullscreenElement) frame.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+
+    function sendCtrlAltDel() {
+      // Post message to noVNC iframe
+      document.getElementById('vnc-frame').contentWindow?.postMessage({ action: 'ctrlaltdel' }, '*');
+    }
+
+    // ═══════════════════════════════════════════════
+    // POWER CONTROLS
+    // ═══════════════════════════════════════════════
+    function showPowerPanel(action) {
+      pendingPowerAction = action;
+      const labels = { shutdown: 'Shut down this PC?', restart: 'Restart this PC?', sleep: 'Put this PC to sleep?' };
+      document.getElementById('power-panel-text').textContent = labels[action];
+      document.getElementById('power-panel').classList.add('show');
+    }
+
+    function hidePowerPanel() {
+      document.getElementById('power-panel').classList.remove('show');
+      pendingPowerAction = null;
+    }
+
+    async function confirmPowerAction() {
+      if (!pendingPowerAction || !currentPC) return;
+      hidePowerPanel();
+      try {
+        await apiFetch(`/api/pcs/${currentPC.id}/power`, 'POST', { action: pendingPowerAction });
+      } catch (e) { }
+      if (pendingPowerAction === 'shutdown' || pendingPowerAction === 'sleep') {
+        setTimeout(() => leaveRemote(), 1500);
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // API HELPER
+    // ═══════════════════════════════════════════════
+    function apiFetch(path, method, body) {
+      const opts = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+        },
+      };
+      if (body) opts.body = JSON.stringify(body);
+      return fetch(SERVER_URL + path, opts);
+    }
+
+    // ═══════════════════════════════════════════════
+    // AUTO-RESTORE SESSION
+    // ═══════════════════════════════════════════════
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedToken = localStorage.getItem('axion_token');
+      const savedUser = localStorage.getItem('axion_user');
+      if (savedToken && savedUser) {
+        token = savedToken;
+        currentUser = JSON.parse(savedUser);
+        loadDashboard();
+      }
+    });
+
+    // enter key on login/signup
+    document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+    document.getElementById('signup-pass2')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleSignup(); });
+  </script>
+</body>
+
+</html>
