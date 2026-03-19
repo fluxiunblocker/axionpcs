@@ -119,12 +119,12 @@ def run_vnc_tunnel(server, token):
         local_ws  = None
 
         try:
-            # Connect to server
-            server_ws = websocket.create_connection(server_ws_url)
+            # Connect to server with keepalive ping
+            server_ws = websocket.create_connection(server_ws_url, ping_interval=20, ping_timeout=10)
             print("[vnc] Server tunnel open")
 
-            # Connect to local websockify
-            local_ws = websocket.create_connection(local_ws_url, subprotocols=["binary", "base64"])
+            # Connect to local websockify with keepalive
+            local_ws = websocket.create_connection(local_ws_url, subprotocols=["binary", "base64"], ping_interval=20, ping_timeout=10)
             print("[vnc] Local websockify open — VNC tunnel active!")
 
             # Bridge them: two threads forwarding in each direction
