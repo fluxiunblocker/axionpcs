@@ -1612,12 +1612,19 @@
     async function confirmDeletePC() {
       if (!deletePCId) return;
       try {
-        await apiFetch(`/api/pcs/${deletePCId}`, 'DELETE');
-      } catch (e) { }
-      pcs = pcs.filter(p => p.id !== deletePCId);
+        const res = await apiFetch(`/api/pcs/${deletePCId}`, 'DELETE');
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          alert('Error removing PC: ' + (d.error || res.status));
+          return;
+        }
+      } catch (e) {
+        alert('Could not reach server: ' + e.message);
+        return;
+      }
       deletePCId = null;
       closeModal('modal-delete');
-      renderPCGrid();
+      await fetchPCs();
     }
 
     function closeModal(id) {
