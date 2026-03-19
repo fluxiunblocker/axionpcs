@@ -1,5 +1,5 @@
 // AxionPCs Backend — server.js
-// npm install express ws jsonwebtoken bcryptjs uuid cors
+// npm install express ws jsonwebtoken bcryptjs uuid cors mongoose
 
 const express = require('express');
 const http = require('http');
@@ -10,43 +10,51 @@ const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
-const net = require('net');
+const mongoose = require('mongoose');
 
 const app = express();
 const server = http.createServer(app);
 
-// ─── CONFIG ───────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
-const DATA_FILE = path.join(__dirname, 'data.json');
+const MONGO_URL = process.env.MONGO_URL || '';
+
+// ─── MONGOOSE MODELS ─────────────────────────────────────────────
+const userSchema = new mongoose.Schema({
+  id: { type: String, default: () => uuidv4() },
+  username: { type: String, unique: true },
+  email: { type: String, unique: true },
+  password: String,
+  createdAt: { type: Number, default: () => Date.now() },
+});
+
+const pcSchema = new mongoose.Schema({
+  id: { type: String, default: () => uuidv4() },
+  userId: String,
+  name: String,
+  os: String,
+  agentToken: { type: String, default: () => uuidv4() },
+  agentConnected: { type: Boolean, default: false },
+  ip: { type: String, default: null },
+  cpu: { type: Number, default: 0 },
+  ram: { type: Number, default: 0 },
+  disk: { type: Number, default: 0 },
+  createdAt: { type: Number, default: () => Date.now() },
+});
+
+const User = mongoose.model('User', userSchema);
+const PC = mongoose.model('PC', pcSchema);
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
 
 const frontendPath = fs.existsSync(path.join(__dirname, 'index.html'))
-  ? __dirname
-  : path.join(__dirname, 'frontend');
+  ? __dirname : path.join(__dirname, 'frontend');
 app.use(express.static(frontendPath));
 
-// Explicitly serve novnc folder
 const novncPath = path.join(__dirname, 'novnc');
-if (fs.existsSync(novncPath)) {
-  app.use('/novnc', express.static(novncPath));
-  console.log('[novnc] Serving noVNC from', novncPath);
-} else {
-  console.warn('[novnc] WARNING: novnc folder not found at', novncPath);
-}
-
-// ─── DATABASE ─────────────────────────────────────────────────────
-function loadDB() {
-  if (!fs.existsSync(DATA_FILE)) return { users: [], pcs: [] };
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-}
-function saveDB(db) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
-}
+if (fs.existsSync(novncPath)) app.use('/novnc', express.static(novncPath));
 
 // ─── AUTH MIDDLEWARE ──────────────────────────────────────────────
 function authMiddleware(req, res, next) {
@@ -62,175 +70,120 @@ function authMiddleware(req, res, next) {
 app.post('/api/signup', async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'Missing fields' });
-  const db = loadDB();
-  if (db.users.find(u => u.username === username || u.email === email))
+  if (await User.findOne({ $or: [{ username }, { email }] }))
     return res.status(409).json({ error: 'Username or email already taken' });
   const hash = await bcrypt.hash(password, 10);
-  const user = { id: uuidv4(), username, email, password: hash, createdAt: Date.now() };
-  db.users.push(user);
-  saveDB(db);
+  const user = await User.create({ username, email, password: hash });
   const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
 });
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  const db = loadDB();
-  const user = db.users.find(u => u.username === username || u.email === username);
+  const user = await User.findOne({ $or: [{ username }, { email: username }] });
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!await bcrypt.compare(password, user.password)) return res.status(401).json({ error: 'Invalid credentials' });
   const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
 });
 
 // ─── PC ROUTES ────────────────────────────────────────────────────
-app.get('/api/pcs', authMiddleware, (req, res) => {
-  const db = loadDB();
-  const userPCs = db.pcs
-    .filter(p => p.userId === req.user.id)
-    .map(p => ({
-      id: p.id, name: p.name, os: p.os,
-      ip: p.ip || null, vnc_port: p.vnc_port || null,
-      status: p.agentConnected ? 'online' : 'offline',
-      cpu: p.cpu || 0, ram: p.ram || 0, disk: p.disk || 0,
-    }));
-  res.json(userPCs);
+app.get('/api/pcs', authMiddleware, async (req, res) => {
+  const pcs = await PC.find({ userId: req.user.id });
+  res.json(pcs.map(p => ({
+    id: p.id, name: p.name, os: p.os,
+    ip: p.ip, status: p.agentConnected ? 'online' : 'offline',
+    cpu: p.cpu, ram: p.ram, disk: p.disk,
+  })));
 });
 
-app.post('/api/pcs', authMiddleware, (req, res) => {
+app.post('/api/pcs', authMiddleware, async (req, res) => {
   const { name, os } = req.body;
   if (!name || !os) return res.status(400).json({ error: 'Missing fields' });
-  const db = loadDB();
-  const pc = {
-    id: uuidv4(), userId: req.user.id, name, os,
-    agentToken: uuidv4(), agentConnected: false,
-    sleeping: false, ip: null, vnc_port: null,
-    cpu: 0, ram: 0, disk: 0, createdAt: Date.now(),
-  };
-  db.pcs.push(pc);
-  saveDB(db);
+  const pc = await PC.create({ userId: req.user.id, name, os });
   res.json({ id: pc.id, agentToken: pc.agentToken });
 });
 
-app.delete('/api/pcs/:id', authMiddleware, (req, res) => {
-  const db = loadDB();
-  const idx = db.pcs.findIndex(p => p.id === req.params.id && p.userId === req.user.id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  db.pcs.splice(idx, 1);
-  saveDB(db);
+app.delete('/api/pcs/:id', authMiddleware, async (req, res) => {
+  await PC.deleteOne({ id: req.params.id, userId: req.user.id });
   res.json({ ok: true });
 });
 
-app.post('/api/pcs/:id/power', authMiddleware, (req, res) => {
+app.post('/api/pcs/:id/power', authMiddleware, async (req, res) => {
   const { action } = req.body;
-  const pc = loadDB().pcs.find(p => p.id === req.params.id && p.userId === req.user.id);
+  const pc = await PC.findOne({ id: req.params.id, userId: req.user.id });
   if (!pc) return res.status(404).json({ error: 'Not found' });
-  const agentWs = agentConnections.get(pc.id + ':ctrl');
-  if (!agentWs || agentWs.readyState !== WebSocket.OPEN)
+  const ctrlWs = agentConnections.get(pc.id + ':ctrl');
+  if (!ctrlWs || ctrlWs.readyState !== WebSocket.OPEN)
     return res.status(503).json({ error: 'Agent not connected' });
-  agentWs.send(JSON.stringify({ type: 'power', action }));
+  ctrlWs.send(JSON.stringify({ type: 'power', action }));
   res.json({ ok: true });
 });
 
-// ─── WEBSOCKET SERVER ─────────────────────────────────────────────
-// agentConnections: pcId:ctrl -> WS (control)
-//                  pcId       -> WS (vnc tunnel from agent)
+// ─── WEBSOCKET ────────────────────────────────────────────────────
 const agentConnections = new Map();
 const vncQueue = new Map();
-
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', async (ws, req) => {
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname;
 
-  // ── AGENT ──
   if (pathname === '/agent-ws') {
     const agentToken = url.searchParams.get('token');
     const mode = url.searchParams.get('mode') || 'control';
-    const db = loadDB();
-    const pc = db.pcs.find(p => p.agentToken === agentToken);
+    const pc = await PC.findOne({ agentToken });
     if (!pc) { ws.close(4001, 'Invalid token'); return; }
 
     if (mode === 'control') {
-      console.log(`[agent] "${pc.name}" control connected`);
-      pc.agentConnected = true; saveDB(db);
+      pc.agentConnected = true; await pc.save();
       agentConnections.set(pc.id + ':ctrl', ws);
+      console.log(`[ctrl] "${pc.name}" connected`);
 
-      ws.on('message', msg => {
+      ws.on('message', async msg => {
         try {
           const d = JSON.parse(msg);
           if (d.type === 'stats') {
-            const db2 = loadDB();
-            const pc2 = db2.pcs.find(p => p.id === pc.id);
-            if (pc2) {
-              pc2.cpu = d.cpu; pc2.ram = d.ram;
-              pc2.disk = d.disk; pc2.ip = d.ip;
-              pc2.agentConnected = true;
-              saveDB(db2);
-            }
+            await PC.updateOne({ id: pc.id }, { cpu: d.cpu, ram: d.ram, disk: d.disk, ip: d.ip, agentConnected: true });
           }
         } catch { }
       });
 
-      ws.on('close', () => {
+      ws.on('close', async () => {
         agentConnections.delete(pc.id + ':ctrl');
-        const db2 = loadDB();
-        const pc2 = db2.pcs.find(p => p.id === pc.id);
-        if (pc2) { pc2.agentConnected = false; saveDB(db2); }
-        console.log(`[agent] "${pc.name}" control disconnected`);
+        await PC.updateOne({ id: pc.id }, { agentConnected: false });
+        console.log(`[ctrl] "${pc.name}" disconnected`);
       });
 
     } else {
-      // VNC tunnel from agent
-      console.log(`[agent] "${pc.name}" VNC tunnel connected`);
       agentConnections.set(pc.id, ws);
-
+      console.log(`[vnc] "${pc.name}" tunnel connected`);
       if (vncQueue.has(pc.id)) {
-        for (const browserWs of vncQueue.get(pc.id)) bridgeWS(browserWs, ws);
+        for (const bws of vncQueue.get(pc.id)) bridgeWS(bws, ws);
         vncQueue.delete(pc.id);
       }
-
-      ws.on('close', () => {
-        agentConnections.delete(pc.id);
-        console.log(`[agent] "${pc.name}" VNC tunnel disconnected`);
-      });
+      ws.on('close', () => { agentConnections.delete(pc.id); });
     }
     return;
   }
 
-  // ── BROWSER (noVNC) via /vnc-ws/:pcId ──
   const vncMatch = pathname.match(/^\/vnc-ws\/([a-f0-9-]+)/);
   if (vncMatch) {
     const pcId = vncMatch[1];
-
-    const db = loadDB();
-    const pc = db.pcs.find(p => p.id === pcId);
-    if (!pc) { ws.close(4004, 'PC not found'); return; }
-
-    // Use websockify proxy: connect directly to TightVNC via TCP
-    // The agent reports its local IP — we connect through the agent's VNC tunnel WS
-    const agentVncWs = agentConnections.get(pcId);
-    if (agentVncWs && agentVncWs.readyState === WebSocket.OPEN) {
-      bridgeWS(ws, agentVncWs);
+    const agentWs = agentConnections.get(pcId);
+    if (agentWs && agentWs.readyState === WebSocket.OPEN) {
+      bridgeWS(ws, agentWs);
     } else {
       if (!vncQueue.has(pcId)) vncQueue.set(pcId, []);
       vncQueue.get(pcId).push(ws);
       setTimeout(() => { if (ws.readyState === WebSocket.OPEN) ws.close(4002, 'Agent timeout'); }, 15000);
     }
-    return;
   }
 });
 
-// Bridge two WebSockets bidirectionally (binary + text)
 function bridgeWS(a, b) {
-  a.on('message', (data, isBinary) => {
-    if (b.readyState === WebSocket.OPEN) b.send(data, { binary: isBinary });
-  });
-  b.on('message', (data, isBinary) => {
-    if (a.readyState === WebSocket.OPEN) a.send(data, { binary: isBinary });
-  });
+  a.on('message', (data, isBinary) => { if (b.readyState === WebSocket.OPEN) b.send(data, { binary: isBinary }); });
+  b.on('message', (data, isBinary) => { if (a.readyState === WebSocket.OPEN) a.send(data, { binary: isBinary }); });
   a.on('close', () => { try { b.close(4003, 'Peer closed'); } catch { } });
   b.on('close', () => { try { a.close(4003, 'Agent disconnected'); } catch { } });
 }
@@ -243,6 +196,15 @@ app.get('*', (req, res) => {
 });
 
 // ─── START ────────────────────────────────────────────────────────
-server.listen(PORT, () => {
-  console.log(`\n✦ AxionPCs running on http://localhost:${PORT}\n`);
-});
+async function start() {
+  if (MONGO_URL) {
+    await mongoose.connect(MONGO_URL);
+    console.log('[db] Connected to MongoDB');
+  } else {
+    console.warn('[db] No MONGO_URL set — running without database (data will not persist)');
+  }
+  server.listen(PORT, () => {
+    console.log(`\n✦ AxionPCs running on http://localhost:${PORT}\n`);
+  });
+}
+start();
