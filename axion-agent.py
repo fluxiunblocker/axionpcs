@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AxionPCs Agent — uses websockify to bridge VNC properly
+AxionPCs Agent — on-demand VNC tunnel
 pip install websocket-client psutil websockify
-python axion-agent.py --token YOUR_TOKEN --server http://localhost:3000
+python axion-agent.py --token YOUR_TOKEN --server https://axionpcs.onrender.com
 """
 import argparse, json, socket, sys, threading, time, subprocess, platform, os
 
@@ -11,12 +11,12 @@ except ImportError: print("[!] pip install psutil"); sys.exit(1)
 try: import websocket
 except ImportError: print("[!] pip install websocket-client"); sys.exit(1)
 
-VNC_HOST       = "127.0.0.1"
-VNC_PORT       = 5900
-WEBSOCKIFY_PORT = 15900   # local port websockify listens on
-STATS_INTERVAL = 10
-RECONNECT      = 5
-running        = True
+VNC_HOST        = "127.0.0.1"
+VNC_PORT        = 5900
+WEBSOCKIFY_PORT = 15900
+STATS_INTERVAL  = 20
+RECONNECT       = 5
+running         = True
 websockify_proc = None
 
 def get_ip():
@@ -39,9 +39,9 @@ def execute_power(action):
     if cmd: subprocess.Popen(cmd)
 
 def start_websockify():
-    """Start websockify to bridge WebSocket -> TightVNC TCP"""
     global websockify_proc
-    print(f"[ws4y] Starting websockify on port {WEBSOCKIFY_PORT} -> {VNC_HOST}:{VNC_PORT}")
+    if websockify_proc and websockify_proc.poll() is None:
+        return True
     try:
         websockify_proc = subprocess.Popen(
             [sys.executable, "-m", "websockify", str(WEBSOCKIFY_PORT), f"{VNC_HOST}:{VNC_PORT}"],
@@ -51,19 +51,11 @@ def start_websockify():
         print(f"[ws4y] websockify running (pid {websockify_proc.pid})")
         return True
     except Exception as e:
-        print(f"[ws4y] Failed to start websockify: {e}")
-        return False
+        print(f"[ws4y] Failed: {e}"); return False
 
-def stop_websockify():
-    global websockify_proc
-    if websockify_proc:
-        try: websockify_proc.terminate()
-        except: pass
-        websockify_proc = None
-
-# ══════════════════════════════════════
-# CONTROL CONNECTION (stats + power)
-# ══════════════════════════════════════
+# ── CONTROL CONNECTION ─────────────────────────────────────────────
+# Stays connected permanently, sends stats, receives power commands
+# When server sends {"type":"connect_vnc"}, we open a VNC tunnel
 def run_control(server, token):
     ws_url = server.replace("https://","wss://").replace("http://","ws://")
     ws_url = f"{ws_url}/agent-ws?token={token}&mode=control"
@@ -78,7 +70,7 @@ def run_control(server, token):
                     disk = round(psutil.disk_usage("C:\\" if platform.system()=="Windows" else "/").percent)
                     ip   = get_ip()
                     ws.send(json.dumps({"type":"stats","cpu":cpu,"ram":ram,"disk":disk,"ip":ip}))
-                    print(f"[stats] CPU:{cpu}% RAM:{ram}% Disk:{disk}% IP:{ip}")
+                    print(f"[stats] CPU:{cpu}% RAM:{ram}% Disk:{disk}%")
                 except Exception as e: print(f"[stats] {e}"); break
                 time.sleep(STATS_INTERVAL)
         threading.Thread(target=stats, daemon=True).start()
@@ -86,7 +78,12 @@ def run_control(server, token):
     def on_message(ws, msg):
         try:
             d = json.loads(msg)
-            if d.get("type") == "power": execute_power(d["action"])
+            if d.get("type") == "power":
+                execute_power(d["action"])
+            elif d.get("type") == "connect_vnc":
+                # Server is telling us a browser wants to connect — open tunnel now
+                print("[ctrl] Browser connecting — opening VNC tunnel...")
+                threading.Thread(target=run_vnc_tunnel, args=(server, token), daemon=True).start()
         except: pass
 
     def on_error(ws, e): print(f"[ctrl] Error: {e}")
@@ -95,72 +92,58 @@ def run_control(server, token):
     while running:
         ws = websocket.WebSocketApp(ws_url, on_open=on_open,
             on_message=on_message, on_error=on_error, on_close=on_close)
-        ws.run_forever(ping_interval=30, ping_timeout=10)
+        ws.run_forever(ping_interval=20, ping_timeout=10)
         if running: time.sleep(RECONNECT)
 
-# ══════════════════════════════════════
-# VNC TUNNEL (websockify -> server)
-# Connects local websockify WS to the AxionPCs server WS tunnel
-# ══════════════════════════════════════
+# ── ON-DEMAND VNC TUNNEL ───────────────────────────────────────────
+# Only opens when server requests it (browser clicked Connect)
 def run_vnc_tunnel(server, token):
-    """
-    Bridge: AxionPCs server <-> local websockify
-    - Connect to AxionPCs server as agent VNC endpoint
-    - Connect to local websockify as a WebSocket client
-    - Forward all binary frames between them
-    """
     server_ws_url = server.replace("https://","wss://").replace("http://","ws://")
     server_ws_url = f"{server_ws_url}/agent-ws?token={token}&mode=vnc"
     local_ws_url  = f"ws://127.0.0.1:{WEBSOCKIFY_PORT}"
 
-    while running:
-        print("[vnc] Connecting VNC tunnel to server...")
-        server_ws = None
-        local_ws  = None
+    print("[vnc] Opening on-demand VNC tunnel...")
+    server_ws = None
+    local_ws  = None
 
-        try:
-            # Connect to server with keepalive ping
-            server_ws = websocket.create_connection(server_ws_url, ping_interval=20, ping_timeout=10)
-            print("[vnc] Server tunnel open")
+    try:
+        server_ws = websocket.create_connection(server_ws_url, timeout=15)
+        print("[vnc] Server tunnel open")
 
-            # Connect to local websockify with keepalive
-            local_ws = websocket.create_connection(local_ws_url, subprotocols=["binary", "base64"], ping_interval=20, ping_timeout=10)
-            print("[vnc] Local websockify open — VNC tunnel active!")
+        local_ws = websocket.create_connection(local_ws_url,
+            subprotocols=["binary","base64"], timeout=10)
+        print("[vnc] Local VNC open — streaming!")
 
-            # Bridge them: two threads forwarding in each direction
-            stop_event = threading.Event()
+        stop_event = threading.Event()
 
-            def fwd(src, dst, label):
-                try:
-                    while not stop_event.is_set():
-                        opcode, data = src.recv_data()
-                        if data:
-                            dst.send_binary(data) if opcode == websocket.ABNF.OPCODE_BINARY else dst.send(data)
-                except Exception as e:
-                    if running: print(f"[vnc] {label}: {e}")
-                finally:
-                    stop_event.set()
+        def fwd(src, dst, label):
+            try:
+                while not stop_event.is_set():
+                    opcode, data = src.recv_data()
+                    if data:
+                        if opcode == websocket.ABNF.OPCODE_BINARY:
+                            dst.send(data, websocket.ABNF.OPCODE_BINARY)
+                        else:
+                            dst.send(data)
+            except Exception as e:
+                if running: print(f"[vnc] {label}: {e}")
+            finally:
+                stop_event.set()
 
-            t1 = threading.Thread(target=fwd, args=(server_ws, local_ws, "server->local"), daemon=True)
-            t2 = threading.Thread(target=fwd, args=(local_ws, server_ws, "local->server"), daemon=True)
-            t1.start(); t2.start()
-            stop_event.wait()
+        t1 = threading.Thread(target=fwd, args=(server_ws, local_ws, "srv->vnc"), daemon=True)
+        t2 = threading.Thread(target=fwd, args=(local_ws, server_ws, "vnc->srv"), daemon=True)
+        t1.start(); t2.start()
+        stop_event.wait()
+        print("[vnc] Session ended")
 
-        except Exception as e:
-            print(f"[vnc] Tunnel error: {e}")
-        finally:
-            for ws in [server_ws, local_ws]:
-                if ws:
-                    try: ws.close()
-                    except: pass
+    except Exception as e:
+        print(f"[vnc] Tunnel error: {e}")
+    finally:
+        for ws in [server_ws, local_ws]:
+            if ws:
+                try: ws.close()
+                except: pass
 
-        if running:
-            print(f"[vnc] Reconnecting in {RECONNECT}s...")
-            time.sleep(RECONNECT)
-
-# ══════════════════════════════════════
-# MAIN
-# ══════════════════════════════════════
 def main():
     global VNC_PORT, WEBSOCKIFY_PORT
     parser = argparse.ArgumentParser()
@@ -170,7 +153,7 @@ def main():
     args = parser.parse_args()
 
     VNC_PORT        = args.vnc_port
-    WEBSOCKIFY_PORT = VNC_PORT + 10000  # e.g. 5900 -> 15900
+    WEBSOCKIFY_PORT = VNC_PORT + 10000
     server          = args.server.rstrip('/')
     token           = args.token
 
@@ -181,22 +164,17 @@ def main():
 ║  VNC    : {VNC_HOST}:{VNC_PORT:<24}║
 ╚══════════════════════════════════════╝
 """)
-
-    # Start websockify
     if not start_websockify():
         print("[!] Could not start websockify. Run: pip install websockify")
         sys.exit(1)
 
-    # Run control + VNC tunnel in parallel threads
-    t1 = threading.Thread(target=run_control,    args=(server, token), daemon=True)
-    t2 = threading.Thread(target=run_vnc_tunnel, args=(server, token), daemon=True)
-    t1.start(); t2.start()
+    threading.Thread(target=run_control, args=(server, token), daemon=True).start()
 
     try:
         while running: time.sleep(1)
     except KeyboardInterrupt:
-        print("\n[agent] Stopping...")
-        stop_websockify()
+        print("\n[agent] Stopped.")
+        if websockify_proc: websockify_proc.terminate()
 
 if __name__ == "__main__":
     main()

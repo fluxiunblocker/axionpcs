@@ -170,14 +170,25 @@ wss.on('connection', async (ws, req) => {
   const vncMatch = pathname.match(/^\/vnc-ws\/([a-f0-9-]+)/);
   if (vncMatch) {
     const pcId = vncMatch[1];
-    const agentWs = agentConnections.get(pcId);
-    if (agentWs && agentWs.readyState === WebSocket.OPEN) {
-      bridgeWS(ws, agentWs);
-    } else {
-      if (!vncQueue.has(pcId)) vncQueue.set(pcId, []);
-      vncQueue.get(pcId).push(ws);
-      setTimeout(() => { if (ws.readyState === WebSocket.OPEN) ws.close(4002, 'Agent timeout'); }, 15000);
+
+    // Tell the agent's control channel to open a VNC tunnel NOW
+    const ctrlWs = agentConnections.get(pcId + ':ctrl');
+    if (ctrlWs && ctrlWs.readyState === WebSocket.OPEN) {
+      ctrlWs.send(JSON.stringify({ type: 'connect_vnc' }));
     }
+
+    // Wait up to 8 seconds for the agent to open the VNC tunnel
+    const tryBridge = (attempts) => {
+      const agentWs = agentConnections.get(pcId);
+      if (agentWs && agentWs.readyState === WebSocket.OPEN) {
+        bridgeWS(ws, agentWs);
+      } else if (attempts > 0 && ws.readyState === WebSocket.OPEN) {
+        setTimeout(() => tryBridge(attempts - 1), 500);
+      } else {
+        if (ws.readyState === WebSocket.OPEN) ws.close(4002, 'Agent timeout');
+      }
+    };
+    setTimeout(() => tryBridge(16), 300); // try for 8 seconds
   }
 });
 
