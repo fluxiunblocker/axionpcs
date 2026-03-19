@@ -107,16 +107,17 @@ def run_vnc_tunnel(server, token):
     local_ws  = None
 
     try:
-        server_ws = websocket.create_connection(server_ws_url, timeout=15)
+        server_ws = websocket.create_connection(server_ws_url, timeout=30)
         print("[vnc] Server tunnel open")
 
         local_ws = websocket.create_connection(local_ws_url,
-            subprotocols=["binary","base64"], timeout=10)
+            subprotocols=["binary","base64"], timeout=30)
         print("[vnc] Local VNC open — streaming!")
 
         stop_event = threading.Event()
 
         def fwd(src, dst, label):
+            src.sock.settimeout(None)  # no timeout during active session
             try:
                 while not stop_event.is_set():
                     opcode, data = src.recv_data()
